@@ -4,8 +4,11 @@ fielddevice
 Digimat DCF FieldDevice Implementation
 
 
-## Example with PiFaceDigital board (raspberry pi)
+## Example 
 
+Simple Device demo with the PiFaceDigital board (raspberry pi)
+
+```
 from device import Device, IOManager
 from pifacedigitalio import PiFaceDigital
 
@@ -55,7 +58,8 @@ dev.allowRemoteShutdown(True)
 dev.start()
 
 ```
-```
+
+
 
 
 
