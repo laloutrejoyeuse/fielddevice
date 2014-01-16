@@ -26,7 +26,6 @@ class IO(object):
 		self._name=name
 		self._value=0.0
 		self._valueRaw=0
-		self._valueMem=0
 		self._stamp=0
 		self._stampRaw=0
 		self._unit=None
@@ -37,6 +36,7 @@ class IO(object):
 		self._index=index
 		self._runMode=IORunMode.Standard
 		self._trigger=0
+		self._stampUpdate=0
 
 	@property
 	def value(self):
@@ -101,6 +101,13 @@ class IO(object):
 		with self._lock:
 			return self._stampRaw
 
+	@property
+	def ageUpdate(self):
+		with self._lock:
+			if self._stampUpdate==0:
+				return -1
+			return time.time()-self._stampUpdate
+
 	def _processValue(self, value):
 		return value
 
@@ -147,6 +154,7 @@ class IO(object):
 	def onUpdate(self):
 		with self._lock:
 			self._iorep.onIOUpdated(self)
+			self._stampUpdate=time.time()
 
 	def dumpAsObject(self):
 		data={'name': self.name, 'label':self.label, 
@@ -312,6 +320,12 @@ class IORepository(object):
 			if reset:
 				self._triggerRun.clear()
 			return True
+
+	def forceRefreshOutputs(self, maxAge=0):
+		with self._lock:
+			for io in self.outputs():
+				if maxAge==0 or io.ageUpdate>maxAge:
+					io.onUpdate()
 
 	def queuePendingOutputWrite(self, io):
 		with self._lock:
@@ -681,29 +695,40 @@ class SimpleTimer(object):
 		self._manager.remove(self)
 
 
+class PeriodicTimer(SimpleTimer):
+	def fire(self):
+		super(PeriodicTimer, self).fire()
+		self.restart()
+
+
 class SimpleTimerManager(object):
 	def __init__(self, target):
 		self._lock=RLock()
 		self._timers=[]
 		self._target=target
 
-	def create(self, delay, handler=None, topic=None):
+	def timer(self, delay, handler=None, topic=None):
 		timer=SimpleTimer(self, delay, handler, topic)
+		return self.add(timer)
+
+	def periodic(self, delay, handler=None, topic=None):
+		timer=PeriodicTimer(self, delay, handler, topic)
 		return self.add(timer)
 
 	def add(self, timer):
 		timeout=timer.timeout
 		with self._lock:
-			pos=0
-			for t in self._timers:
-				if timeout<t.timeout:
-					self._timers.insert(timer, pos)
-					return timer
-				pos+=1
+			if self._timers:
+				pos=0
+				for t in self._timers:
+					if timeout<t.timeout:
+						self._timers.insert(pos, timer)
+						return timer
+					pos+=1
 			self._timers.append(timer)
 			return timer
 
-	def remove(self):
+	def remove(self, timer):
 		try:
 			self._timers.remove(timer)
 		except:
@@ -712,39 +737,46 @@ class SimpleTimerManager(object):
 	def manager(self):
 		if self._timers:
 			with self._lock:
-				try:
-					while self._timers[0].isTimeout():
-						timer=self._timers[0]
-						timer.fire()
-						self.remove(timer)
-				except:
-					pass
+				while self._timers[0].isTimeout():
+					timer=self._timers[0]
+					timer.fire()
+					self.remove(timer)
 
 class IOManager(DeviceThread):
 	def _onInit(self):
 		self.name='IO'
 		self._timers=SimpleTimerManager(self)
 		super(IOManager, self)._onInit()
+		self.iorep.forceRefreshOutputs()
+		self.periodicTimerWithHandler(15, self._onForceRefreshOutputs)
 
 	def _onRelease(self):
 		self.processPendingOutputWrite()
 		super(IOManager, self)._onRelease()
 
 	def timer(self, delay, topic=None):
-		return self._timers.create(delay, self.onTimeout, topic)
+		return self._timers.timer(delay, self.onTimeout, topic)
 
 	def timerWithHandler(self, delay, handler, topic=None):
-		return self._timers.create(delay, handler, topic)
+		return self._timers.timer(delay, handler, topic)
+
+	def periodicTimer(self, delay, topic=None):
+		return self._timers.periodic(delay, self.onTimeout, topic)
+
+	def periodicTimerWithHandler(self, delay, handler, topic=None):
+		return self._timers.periodic(delay, handler, topic)
 
 	def onTimeout(self, timer):
 		pass
 
 	def _onStop(self):
 		super(IOManager, self)._onStop()
-
 		# cancel/fire waiting Trigger/Event, allowing fast exit
 		self.iorep.cancelTriggers()
 		self.iorep.backup()
+
+	def _onForceRefreshOutputs(self, timer):
+		self.iorep.forceRefreshOutputs(60)
 
 	def processPendingOutputWrite(self):
 		while True:
@@ -757,10 +789,6 @@ class IOManager(DeviceThread):
 	def _onRun(self):
 		self.processPendingOutputWrite()
 		self._timers.manager()
-	
-		#...while xxx=self.iorep._queueWrite.get():
-		#...   if self.onWriteOutput(xxx.value, xxx.unit):
-		#		unqueue
 		if super(IOManager, self)._onRun():
 			print "DEBUG: Triggering immediate IOManager run"
 			self.iorep.raiseTriggerRun()
