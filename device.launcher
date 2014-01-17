@@ -1,0 +1,16 @@
+#!/bin/sh
+
+DEFAULTDEVICE=/home/pi/python/fielddevice/pidevice-simple.py
+DEVICE=${1:-$DEFAULTDEVICE}
+
+echo "Launching device [$DEVICE]..."
+
+if [ -f $DEVICE ]; then
+	logger "Launching device [$DEVICE]"
+	exec /usr/bin/python $DEVICE
+fi
+
+logger "$0:unable to find device [$DEVICE]"
+/bin/sleep 15
+
+
