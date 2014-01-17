@@ -32,6 +32,7 @@ class MyIOManager(IOManager):
 		self.sleep(0.01)
 
 	def onUpdateOutput(self, io):
+		print "onUpdateOutput(%s)->%f" % (io.name, io.value)
 		if io==self.lo0:
 			self.pf.output_pins[0].value=io.value
 
