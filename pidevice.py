@@ -1,3 +1,5 @@
+#!/usr/bin/python
+
 from device import Device, IOManager
 from pifacedigitalio import PiFaceDigital
 
