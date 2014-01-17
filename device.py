@@ -13,6 +13,7 @@ from threading import Thread
 from threading import Event
 from threading import Lock, RLock
 import time
+import os
 #import sys, traceback
 
 class IORunMode:
@@ -841,6 +842,9 @@ class Device(object):
 		self._webserver=WebServer(self, port, peerAddress)
 		self._peerAddress=None
 		self._allowRemoteShutdown=False
+		self._enableShutdownOnScriptUpdate=False
+		self._stampFileMonitor={}
+		self.addFileToScriptUpdateMonitor(__file__)
 
 	@property
 	def iorep(self):
@@ -848,6 +852,16 @@ class Device(object):
 
 	def allowRemoteShutdown(self, state=True):
 		self._allowRemoteShutdown=state
+
+	def enableShutdownOnScriptUpdate(self, state=True):
+		self._enableShutdownOnScriptUpdate=state
+
+	def addFileToScriptUpdateMonitor(self, f=__file__):
+		try:
+			self._stampFileMonitor[f]
+		except:
+			print "Adding file [%s] to script update monitor list" % f
+			self._stampFileMonitor[f]=0
 
 	def isRemoteShutdownAllowed(self):
 		return self._allowRemoteShutdown
@@ -887,7 +901,21 @@ class Device(object):
 			print "Device halted."
 
 	def manager(self):
-		pass
+		if self._enableShutdownOnScriptUpdate:
+			try:
+				for f,s in self._stampFileMonitor.items():
+					stamp=os.path.getmtime(os.path.realpath(f))
+					if s==0:
+						self._stampFileMonitor[f]=stamp
+					else:
+						if stamp!=self._stampFileMonitor[f]:
+							print "Device shutdown requested by file [%s] mtime monitoring..." % f
+							time.sleep(2.0)
+							self.stop()
+			except:
+				pass
+
+		time.sleep(1.0)
 
 	def stop(self):
 		if not self._eventStop.isSet():	

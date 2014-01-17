@@ -17,6 +17,8 @@ class MyIOManager(IOManager):
 		# create outputs
 		self.lo0=self.createOutput('lo0', 'relai 0 piface')
 
+		self.lo0.value=1
+
 	def onRun(self):
 		# process inputs
 		self.li0.value=self.pf.input_pins[0].value
@@ -46,5 +48,7 @@ class MyIOManager(IOManager):
 
 dev=Device(MyIOManager, 8888)
 dev.allowRemoteShutdown(True)
+dev.addFileToScriptUpdateMonitor(__file__)
+dev.enableShutdownOnScriptUpdate()
 dev.start()
 
