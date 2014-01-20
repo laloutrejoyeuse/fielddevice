@@ -14,6 +14,7 @@ from threading import Event
 from threading import Lock, RLock
 import time
 import os
+import uuid
 #import sys, traceback
 
 class IORunMode:
@@ -220,6 +221,11 @@ class IORepository(object):
 		self._triggerPoll=Event()
 		self._pendingOutputWrite=[]
 		self._pendingPoll=[]
+		self._uuid=str(uuid.uuid4())
+
+	@property
+	def uuid(self):
+		return self._uuid
 
 	def backup(self):
 		with self._lock:
@@ -488,7 +494,9 @@ class HttpHandler(BaseHTTPRequestHandler):
 
 	@markAsHandler
 	def handler_get_info(self, qs):
-		self.sendJsonResponse({'machine':platform.node(), 'os':platform.system()})
+		self.sendJsonResponse({'machine':platform.node(), 
+			'os':platform.system(), 
+			'instance':self.iorep.uuid})
 
 	@markAsHandler
 	def handler_dump(self, qs):

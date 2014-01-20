@@ -13,6 +13,7 @@ class MyIOManager(IOManager):
 		self.li1.setRunModeAsImpulseCounter()
 		self.li2=self.createInput('li2', 'bouton 2 carte piface (trigger a chaque changement up<-->down)')
 		self.li2.setRunModeAsEdgeCounter()
+		self.li3=self.createInput('li3', 'bouton 3 carte piface')
 
 		# create outputs
 		self.lo0=self.createOutput('lo0', 'relai 0 piface')
@@ -24,11 +25,15 @@ class MyIOManager(IOManager):
 		self.li0.value=self.pf.input_pins[0].value
 		self.li1.value=self.pf.input_pins[1].value
 		self.li2.value=self.pf.input_pins[2].value
+		self.li3.value=self.pf.input_pins[3].value
 
 		# process outputs
 		for io in self.inputs():
 			if io.checkAndClearTrigger():
 				self.lo0.toggle()
+
+		if self.li3.value:
+			self.lo0.toggle()
 
 		# keep CPU load as low as possible
 		self.sleep(0.01)
@@ -48,7 +53,9 @@ class MyIOManager(IOManager):
 
 dev=Device(MyIOManager, 8888)
 dev.allowRemoteShutdown(True)
+
 dev.addFileToScriptUpdateMonitor(__file__)
 dev.enableShutdownOnScriptUpdate()
+
 dev.start()
 
