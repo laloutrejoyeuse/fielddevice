@@ -1036,11 +1036,11 @@ class Device(object):
 
 		self._logger=logger
 
-		ch = logging.StreamHandler()
-		ch.setLevel(loglevel)
-		formatter = logging.Formatter('%(asctime)s:%(name)s::%(levelname)s::%(message)s')
-		ch.setFormatter(formatter)
-		logger.addHandler(ch)
+		# ch = logging.StreamHandler()
+		# ch.setLevel(loglevel)
+		# formatter = logging.Formatter('%(asctime)s:%(name)s::%(levelname)s::%(message)s')
+		# ch.setFormatter(formatter)
+		# logger.addHandler(ch)
 
 		self.logger.info("Configuring device [%s@%s]..." % (key, url))
 
