@@ -1028,12 +1028,11 @@ class IOManager(DeviceThread):
 
 class Device(object):
 	def __init__(self, url, key, auth, iomanager, logserver='localhost', loglevel=logging.DEBUG):
-		socketHandler = logging.handlers.SocketHandler(logserver, logging.handlers.DEFAULT_TCP_LOGGING_PORT)
-		socketHandler.setLevel(loglevel)
 
 		logger=logging.getLogger("DEVICE-%s" % key)
-		logger.addHandler(socketHandler)
 		logger.setLevel(loglevel)
+		socketHandler = logging.handlers.SocketHandler(logserver, logging.handlers.DEFAULT_TCP_LOGGING_PORT)
+		logger.addHandler(socketHandler)
 
 		self._logger=logger
 
