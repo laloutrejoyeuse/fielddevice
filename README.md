@@ -17,32 +17,26 @@ class MyIOManager(IOManager):
 		self.pf=PiFaceDigital()
 
 		# create inputs
-		self.li0=self.createInput('li0', 'bouton 0 carte piface (trigger lorsque down)')
-		self.li0.setRunModeAsRaisingEdgeCounter()
-		self.li1=self.createInput('li1', 'bouton 1 carte piface (trigger lorsque impulsion 0->1->0)')
-		self.li1.setRunModeAsImpulseCounter()
-		self.li2=self.createInput('li2', 'bouton 2 carte piface (trigger a chaque changement up<-->down)')
-		self.li2.setRunModeAsEdgeCounter()
+		self.i0=self.createInput('i0')
+		self.i0.setRunModeAsRaisingEdgeCounter()
 
 		# create outputs
-		self.lo0=self.createOutput('lo0', 'relai 0 piface')
-
+		self.o0=self.createOutput('o0')
+ 
 	def onRun(self):
 		# process inputs
-		self.li0.value=self.pf.input_pins[0].value
-		self.li1.value=self.pf.input_pins[1].value
-		self.li2.value=self.pf.input_pins[2].value
+		self.i0.value=self.pf.input_pins[0].value
 
 		# process outputs
-		for io in self.inputs():
-			if io.checkAndClearTrigger():
-				self.lo0.toggle()
+		if self.i0.checkAndClearTrigger():
+			self.o0.toggle()
 
 		# keep CPU load as low as possible
 		self.sleep(0.01)
 
 	def onUpdateOutput(self, io):
-		if io==self.lo0:
+		self.logger.debug("onUpdateOutput(%s)->%f" % (io.name, io.value))
+		if io==self.o0:
 			self.pf.output_pins[0].value=io.value
 
 	def onStop(self):
@@ -51,12 +45,14 @@ class MyIOManager(IOManager):
 
 	def onRelease(self):
 		pass
+
 	
+dev=Device('https://192.168.2.1/rws/api/dcf', 
+	's_STDEMO_fd2', 
+	'BFEBB90A6F1876531F14225D6AAF3BE0', 
+	MyIOManager)
 
-dev=Device(MyIOManager, 8888)
-dev.allowRemoteShutdown(True)
 dev.start()
-
 ```
 
 
