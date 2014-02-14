@@ -2,6 +2,7 @@
 from device import Device, IOManager
 import time
 import logging
+from homematic import CCU
 
 class MyIOManager(IOManager):
 	def onInit(self):
@@ -23,7 +24,8 @@ class MyIOManager(IOManager):
 
 		self.periodicTimer(3, self.onTimerToggle)
 
-		self.job(self.piCamThread)
+		#self.job(self.piCamThread)
+		self.job(self.ccuThread)
 
 	def piCamThread(self):
 		i=5
@@ -31,6 +33,21 @@ class MyIOManager(IOManager):
 			self.logger.debug("PICAM%d!" % i)
 			i-=1
 			time.sleep(1)
+
+	def ccuThread(self):
+		ccu=CCU(self.name, 'http://192.168.0.29:2001', 'http://10.10.100.10:8077', self.logger)
+		ccu.start()
+		while not self.isStopRequest():
+			notification=ccu.waitForNotification(2)
+			if notification:
+				ccu.logger.warning(notification.dump())
+				try:
+					if notification.key=='motion':
+						self.lo1.value=bool(notification.value)
+				except:
+					pass
+		ccu.stop()
+
 
 	def onRun(self):
 		# process inputs

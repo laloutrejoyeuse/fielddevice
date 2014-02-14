@@ -13,6 +13,7 @@ import threading
 from threading import Thread
 from threading import Event
 from threading import Lock, RLock
+from threading import Timer
 import time
 import os
 import requests
@@ -20,9 +21,9 @@ import math
 import sys, traceback
 import logging, logging.handlers
 import base64
-import colorer
+#import colorer
 
-DEVICE_VERSION='0.2.0'
+DEVICE_VERSION='0.2.1'
 
 class IORunMode:
 	Standard, ImpulseCounter, EdgeCounter, RaisingEdgeCounter = range(0,4)
@@ -191,7 +192,7 @@ class IO(object):
 
 	def dumpAsObject(self):
 		data={'name': self.name, 'label':self.label, 
-			'index':self.index, 'input':self.isInput(), 
+			'index':self.index, 'input':self.isInput(),
 			'value':self.value, 'unit':self.unit,
 			'valueraw':self.valueRaw,
 			'age':self.age, 
@@ -199,6 +200,9 @@ class IO(object):
 			'updatecount':self.updateCount,
 			'trigger':self.trigger}
 		return data
+
+	def __repr__(self):
+		return str(self.dumpAsObject())
 
 	def enableIrq(self):
 		self.setIrqDelta(0)
@@ -268,13 +272,14 @@ class Output(IOSimple):
 		self._input=False
 		self.logger.debug('Creating Output %s...' % self.name)
 
-class InputBinary(IOSimple):
+
+class BinaryInput(IOSimple):
 	def __init__(self, iorep, name, contentType, label='', index=None):
-		super(InputBinary, self).__init__(iorep, name, label, index)
+		super(BinaryInput, self).__init__(iorep, name, label, index)
 		self._contentType=contentType
 		self._input=True
 		self._irqMode=IOIrqMode.Ignore
-		self.logger.debug('Creating B64Binary/%s Input %s...' % (contentType, self.name))
+		self.logger.debug('Creating B64Binary/%s/Input %s...' % (contentType, self.name))
 
 	def _processValue(self, value):
 		# already locked when called
@@ -288,7 +293,6 @@ class InputBinary(IOSimple):
 		with self._lock:
 			return {'name':self._name, 'value':self._value, 'content':self._contentType, 'encoding':'b64'}
 
-
 class IORepository(object):
 	def __init__(self, device):
 		self._lock=RLock()
@@ -297,6 +301,7 @@ class IORepository(object):
 		self._ios={}
 		self._inputs={}
 		self._outputs={}
+
 		self._triggerRun=Event()
 		self._triggerIrq=Event()
 		self._pendingOutputWrite=[]
@@ -346,10 +351,10 @@ class IORepository(object):
 			index=len(self._inputs)
 		return self.addIO(Input(self, name, label, index))
 
-	def createInputBinary(self, name, contentType, label='', index=None):
+	def createBinaryInput(self, name, contentType, label='', index=None):
 		if index==None:
 			index=len(self._inputs)
-		return self.addIO(InputBinary(self, name, contentType, label, index))
+		return self.addIO(BinaryInput(self, name, contentType, label, index))
 
 	def createOutput(self, name, label='', index=None):
 		if index==None:
@@ -697,7 +702,6 @@ class DcfManager(DeviceThread):
 	def onSetStateRequest(self, message):
 		io=self.iorep.io(message['name'])
 		if io:
-			self.logger.debug("onSetStateRequest(%s)" % io.name)
 			try:
 				value=message['value']
 				if type(value) is dict:
@@ -705,6 +709,7 @@ class DcfManager(DeviceThread):
 				else:
 					io.value=float(value)
 					io.unit=message['unit']
+					self.logger.debug("onSetStateRequest(%s=%f)" % (io.name, io.value))
 			except:
 				self.logger.error("Exception occured during onSetStateRequest()")
 
@@ -742,9 +747,13 @@ class DcfManager(DeviceThread):
 				self.logger.debug("send/device(%s)" % ((data[:150] + '...') if len(data) > 150 else data))
 				r=requests.post(self._url, params=p, timeout=15.0, allow_redirects=True, verify=False, data=data)
 				if not r or r.status_code != requests.codes.ok:
-					self.logger.error("Abnormal result received while flushing txqueue!")
+					self.logger.error("Abnormal http result %d received while flushing txqueue [%s]!" % (r.status_code, self._url))
+			except requests.exceptions.ConnectionError:
+				self.logger.error("HTTPError while sending message to server!")
+			except requests.exceptions.HTTPError:
+				self.logger.error("HTTPError while sending message to server!")
 			except:
-				self.logger.error("Exception occured while sending message to server!")
+				self.logger.error("RequestException occured while sending message to server!")
 
 	def onRun(self):
 		# block until stop, irq or rx-message via pollThread
@@ -1000,12 +1009,12 @@ class IOManager(DeviceThread):
 		io=self.iorep.createInput(name, label, index)
 		return io
 
-	def createInputBinary(self, name, contentType, label='', index=None):
-		io=self.iorep.createInputBinary(name, contentType, label, index)
+	def createBinaryInput(self, name, contentType, label='', index=None):
+		io=self.iorep.createBinaryInput(name, contentType, label, index)
 		return io
 
-	def createInputJPEG(self, name, label='', index=None):
-		io=self.iorep.createInputBinary(name, 'image/jpeg', label, index)
+	def createJpegInput(self, name, label='', index=None):
+		io=self.iorep.createBinaryInput(name, 'image/jpeg', label, index)
 		return io
 
 	def createOutput(self, name, label='', index=None):
@@ -1027,17 +1036,15 @@ class IOManager(DeviceThread):
 
 
 class Device(object):
-	def __init__(self, url, key, auth, iomanager, logserver='localhost', loglevel=logging.DEBUG):
-
+	def __init__(self, url, key, auth, iomanager, logServer='localhost', logLevel=logging.DEBUG):
 		logger=logging.getLogger("DEVICE-%s" % key)
-		logger.setLevel(loglevel)
-		socketHandler = logging.handlers.SocketHandler(logserver, logging.handlers.DEFAULT_TCP_LOGGING_PORT)
+		logger.setLevel(logLevel)
+		socketHandler = logging.handlers.SocketHandler(logServer, logging.handlers.DEFAULT_TCP_LOGGING_PORT)
 		logger.addHandler(socketHandler)
-
 		self._logger=logger
 
 		# ch = logging.StreamHandler()
-		# ch.setLevel(loglevel)
+		# ch.setLevel(logLevel)
 		# formatter = logging.Formatter('%(asctime)s:%(name)s::%(levelname)s::%(message)s')
 		# ch.setFormatter(formatter)
 		# logger.addHandler(ch)
@@ -1073,6 +1080,10 @@ class Device(object):
 	@property
 	def lkey(self):
 		return self._lkey
+
+	@property
+	def name(self):
+	    return self._lkey
 
 	@property
 	def url(self):

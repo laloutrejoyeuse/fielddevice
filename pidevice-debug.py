@@ -7,6 +7,8 @@ import io
 import time
 from threading import Event
 import logging
+from homematic import CCU
+
 
 class MyIOManager(IOManager):
 	def onInit(self):
@@ -26,7 +28,7 @@ class MyIOManager(IOManager):
 
 		self.li3=self.createInput('i3')
 
-		self.cam0=self.createInputJPEG('im0')
+		self.cam0=self.createJpegInput('im0')
 		self.jobCam=self.job(self.piCamManager)
 		self.eventShoot=Event()
 
@@ -34,7 +36,7 @@ class MyIOManager(IOManager):
 		self.lo0=self.createOutput('o0')
 		self.lo1=self.createOutput('o1')
 
-		#self.job2=self.job(self.test)
+		self.ccu=self.job(self.ccuThread)
 
  
 	def onRun(self):
@@ -73,7 +75,7 @@ class MyIOManager(IOManager):
 	def piCamManager(self):
 		while not self.isStopRequest():
 			self.eventShoot.clear()
-			self.logger.debug('picam:capture...')
+			#self.logger.debug('picam:capture...')
 			stream=io.BytesIO()
 			self.cam.led=1
 			self.cam.capture(stream, format='jpeg')
@@ -84,12 +86,22 @@ class MyIOManager(IOManager):
 			self.cam.led=0
 			#self.eventShoot.wait(5)
 
-	def test(self):
-		i=5
-		while i>0:
-			print "TEST %d" % i
-			time.sleep(1)
-			i-=1
+	def ccuThread(self):
+		ccu=CCU(self.name, 'http://192.168.0.29:2001', 'http://192.168.0.252:8077', self.logger)
+		ccu.start()
+		while not self.isStopRequest():
+			notification=ccu.waitForNotification(3)
+			if notification:
+				try:
+					if notification.key=='motion':
+						ccu.logger.info(notification)
+						self.lo1.value=bool(notification.value)
+					else:
+						ccu.logger.warning(notification)
+				except:
+					pass
+		ccu.stop()
+
 	
 
 dev=Device('https://192.168.2.1/rws/api/dcf', 
