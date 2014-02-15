@@ -6,6 +6,7 @@ import time
 
 from pifacedigitalio import PiFaceDigital
 from homematic import CCU
+from vio import VDout, VImpulse
 
 class MyIOManager(IOManager):
 	def onInit(self):
@@ -26,11 +27,14 @@ class MyIOManager(IOManager):
 		# self.irKITCHEN_ENTRANCE=self.createInput('ir2')
 		# self.irENTRANCE_CONFERENCE=self.createInput('ir3')
 
+		self.lightTimer=VImpulse(60)
+
 		self.job(self.ccuThread)
 
  
 	def onRun(self):
 		#state=bool(int(time.time()) % 5)
+		self.lightFHE.value=self.lightTimer.value or self.intrusion.value
 
 		# keep CPU load as low as possible
 		self.sleep(0.01)
@@ -52,10 +56,10 @@ class MyIOManager(IOManager):
 			notification=ccu.waitForNotification(3)
 			if notification:
 				try:
-					if notification.key=='motion':
+					if notification.key=='motion' and notification.value:
 						ccu.logger.info(notification)
 						if notification.isSource(['jeq0701960:1', 'keq0362887:1']):
-							self.lightFHE_DCH.value=notification.value
+							self.lightTimer.pulse()
 					else:
 						ccu.logger.warning(notification)
 				except:
