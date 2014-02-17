@@ -6,7 +6,7 @@ import time
 
 from pifacedigitalio import PiFaceDigital
 from homematic import CCU
-from vio import VDout, VImpulse
+from vio import VDout, Impulse, Oscillator, RisingEdgeDetector
 
 class MyIOManager(IOManager):
 	def onInit(self):
@@ -22,19 +22,41 @@ class MyIOManager(IOManager):
 		self.lightENTRANCE=self.createInput('o4')
 		self.lightCONFERENCE=self.createInput('o5')
 
-		# self.irFHE_DCH=self.createInput('ir0')
-		# self.irDCH_KITCHEN=self.createInput('ir1')
-		# self.irKITCHEN_ENTRANCE=self.createInput('ir2')
-		# self.irENTRANCE_CONFERENCE=self.createInput('ir3')
+		self.irSALEVE=self.createInput('ir0')
+		self.timerSALEVE=Impulse(120)
 
-		self.lightTimer=VImpulse(60)
+		self.irVOIRONS=self.createInput('ir1')
+		self.timerVOIRONS=Impulse(120)
+
+		self.irJURA=self.createInput('ir2')
+		self.timerJURA=Impulse(120)
+
+		self.irROUTE=self.createInput('ir3')
+		self.timerROUTE=Impulse(120)
+
+		self.ccuError=self.createInput('ccuerr')
+		self.timerCCUError=Impulse(900)
 
 		self.job(self.ccuThread)
 
- 
 	def onRun(self):
 		#state=bool(int(time.time()) % 5)
-		self.lightFHE.value=self.lightTimer.value or self.intrusion.value
+		if self.intrusion.value:
+			self.lightFHE.value=1
+			self.lightFHE_DCH.value=1
+			self.lightDCH.value=1
+			self.lightKITCHEN.value=1
+			self.lightENTRANCE.value=1
+			self.lightCONFERENCE.value=1
+		else:
+			self.lightFHE.value=self.timerSALEVE.value or self.timerROUTE.value
+			self.lightFHE_DCH.value=self.timerSALEVE.value or self.timerVOIRONS.value
+			self.lightDCH.value=self.timerSALEVE.value or self.timerVOIRONS.value
+			self.lightKITCHEN.value=self.timerVOIRONS.value or self.timerJURA.value
+			self.lightENTRANCE.value=self.timerVOIRONS.value or self.timerJURA.value or self.timerROUTE.value
+			self.lightCONFERENCE.value=self.timerSALEVE.value or self.timerROUTE.value
+
+		self.ccuError=self.timerCCUError.value
 
 		# keep CPU load as low as possible
 		self.sleep(0.01)
@@ -57,13 +79,33 @@ class MyIOManager(IOManager):
 			if notification:
 				try:
 					if notification.key=='motion' and notification.value:
-						ccu.logger.info(notification)
-						if notification.isSource(['jeq0701960:1', 'keq0362887:1']):
-							self.lightTimer.pulse()
+						ccu.logger.info(notification)						
+						if notification.isSource('JEQ0701998:1'):   	# kitchen
+							self.timerVOIRONS.pulse()
+							self.timerJURA.pulse()
+						elif notification.isSource('JEQ0701960:1'): 	# entree parking salle de conference
+							self.timerSALEVE.pulse()
+							self.timerROUTE.pulse()
+						elif notification.isSource('JEQ0701645:1'): 	# parking FHE
+							self.timerSALEVE.pulse()
+							self.timerROUTE.pulse()
+						elif notification.isSource('JEQ0701644:1'): 	# parking saleve
+							self.timerSALEVE.pulse()
+							self.timerVOIRONS.pulse()
+							self.timerROUTE.pulse()
+						elif notification.isSource('JEQ0701577:1'): 	# parking voirons
+							self.timerVOIRONS.pulse()
+							self.timerSALEVE.pulse()
+					elif notification.key=='error' or notification.key=='sticky_unreach':
+						if notification.value:
+							ccu.logger.error(notification)
+							self.timerCCUError.pulse()
+						else:
+							ccu.logger.debug(notification)
 					else:
-						ccu.logger.warning(notification)
+						ccu.logger.debug(notification)
 				except:
-					pass
+					ccu.logger.error("exception occured while processing ccu event")
 		ccu.stop()
 
 	

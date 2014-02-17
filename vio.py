@@ -38,6 +38,12 @@ class VIO(object):
 	def _manager(self):
 		pass
 
+	def pipe(self, value):
+		with self._lock:
+			self.value=value
+			return self.value
+
+
 
 class VDout(VIO):
 	def __init__(self, t01, t10):
@@ -66,9 +72,9 @@ class VDout(VIO):
 		return self._value
 
 
-class VImpulse(VIO):
+class Impulse(VIO):
 	def __init__(self, delay):
-		super(VImpulse, self).__init__()
+		super(Impulse, self).__init__()
 		self._delay=float(delay)
 		self._targetValue=0
 		self.value=0
@@ -90,9 +96,9 @@ class VImpulse(VIO):
 		return self._value
 
 
-class VOscillator(VIO):
+class Oscillator(VIO):
 	def __init__(self, t0, t1):
-		super(VOscillator, self).__init__()
+		super(Oscillator, self).__init__()
 		self._t0=float(t0)
 		self._t1=float(t1)
 		self.value=0
@@ -106,6 +112,101 @@ class VOscillator(VIO):
 				self._value=1
 				self._setTimeout(self._t1)
 
+
+class Chenillard(VIO):
+	def __init__(self, size, delay):
+		super(Chenillard, self).__init__()
+		self._size=size
+		self._delay=delay
+		self._loop=0
+		self._value=-1
+
+	def __getitem__(self, i):
+		with self._lock:
+			self._manager()
+			if i>=0 and i<self._size and self._value==int(i):
+				return 1
+			return 0
+
+	def channels(self):
+		with self._lock:
+			self._manager()
+			values=[0 for x in range(self._size)]
+			if self._loop and self._value>=0:
+				values[self._value]=1
+			return values
+
+	def __repr__(self):
+		return str(self.channels())
+
+	def _manager(self):
+		if self._isTimeout():
+			if self._value+1<self._size:
+				self._value+=1
+				self._setTimeout(self._delay)
+			else:
+				if self._loop>1:
+					self.start(self._loop-1)
+				else:
+					self._loop=0
+					self._value=-1
+
+	def _processValue(self, value):
+		return self._value
+
+	def start(self, loop=1):
+		with self._lock:
+			if loop>0:
+				self._loop=loop
+				self._value=0
+				self._setTimeout(self._delay)
+			else:
+				self.stop()
+
+	def stop(self):
+		with self._lock:
+			self._loop=0
+			self._value=-1
+
+
+class RisingEdge(VIO):
+	def __init__(self):
+		super(RisingEdge, self).__init__()
+
+	def _processValue(self, value):
+		if value:
+			return self._value+1
+		return self._value
+
+	@VIO.value.getter
+	def value(self):
+		with self._lock:
+			value=self._value
+			self._value=0
+			return value
+
+
+class Edge(VIO):
+	def __init__(self):
+		super(Edge, self).__init__()
+		self._rawValue=0
+
+	def _processValue(self, value):
+		if value:
+			value=1
+		else:
+			value=0
+		if value!=self._rawValue:
+			self._rawValue=value
+			return self._value+1
+		return self._value
+
+	@VIO.value.getter
+	def value(self):
+		with self._lock:
+			value=self._value
+			self._value=0
+	    	return value
 
 
 
