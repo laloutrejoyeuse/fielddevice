@@ -44,7 +44,6 @@ class VIO(object):
 			return self.value
 
 
-
 class VDout(VIO):
 	def __init__(self, t01, t10):
 		super(VDout, self).__init__()
@@ -114,7 +113,7 @@ class Oscillator(VIO):
 
 
 class Chenillard(VIO):
-	def __init__(self, size, delay):
+	def __init__(self, size, delay=1):
 		super(Chenillard, self).__init__()
 		self._size=size
 		self._delay=delay
@@ -132,7 +131,7 @@ class Chenillard(VIO):
 		with self._lock:
 			self._manager()
 			values=[0 for x in range(self._size)]
-			if self._loop and self._value>=0:
+			if self.isActive():
 				values[self._value]=1
 			return values
 
@@ -140,28 +139,32 @@ class Chenillard(VIO):
 		return str(self.channels())
 
 	def _manager(self):
-		if self._isTimeout():
-			if self._value+1<self._size:
-				self._value+=1
+		if self.isActive() and self._isTimeout():
+			self._value+=1
+			if self._value<self._size:
 				self._setTimeout(self._delay)
 			else:
-				if self._loop>1:
-					self.start(self._loop-1)
+				if self._loop>0:
+					self._loop-=1
+					self._value=0
+					self._setTimeout(self._delay)
 				else:
-					self._loop=0
 					self._value=-1
 
 	def _processValue(self, value):
 		return self._value
 
-	def start(self, loop=1):
+	def start(self, count=1):
 		with self._lock:
-			if loop>0:
-				self._loop=loop
+			if count>0:
+				self._loop=count-1
 				self._value=0
 				self._setTimeout(self._delay)
 			else:
 				self.stop()
+
+	def isActive(self):
+		return self._value>=0
 
 	def stop(self):
 		with self._lock:
