@@ -32,7 +32,7 @@ class IOIrqMode:
 	Ignore, Change, Delta = range(0,3) 
 
 class IO(object):
-	def __init__(self, iorep, name, label='', index=None):
+	def __init__(self, iorep, name, group='', index=None):
 		self._lock=RLock()
 		self._iorep=iorep
 		self._name=name
@@ -44,7 +44,7 @@ class IO(object):
 		self._error=False
 		self._input=True
 		self._retain=False
-		self._label=label
+		self._group=group
 		self._index=index
 		self._runMode=IORunMode.Standard
 		self._irqMode=IOIrqMode.Change
@@ -150,8 +150,8 @@ class IO(object):
 		return self._name
 
 	@property
-	def label(self):
-		return self._label
+	def group(self):
+		return self._group
 	
 	@property
 	def index(self):
@@ -191,7 +191,7 @@ class IO(object):
 			self._stampUpdate=time.time()
 
 	def dumpAsObject(self):
-		data={'name': self.name, 'label':self.label, 
+		data={'name': self.name, 'group':self.group, 
 			'index':self.index, 'input':self.isInput(),
 			'value':self.value, 'unit':self.unit,
 			'valueraw':self.valueRaw,
@@ -230,8 +230,8 @@ class IOSimple(IO):
 	pass
 
 class Input(IOSimple):
-	def __init__(self, iorep, name, label='', index=None):
-		super(Input, self).__init__(iorep, name, label, index)
+	def __init__(self, iorep, name, group='', index=None):
+		super(Input, self).__init__(iorep, name, group, index)
 		self._input=True
 		self.logger.debug('Creating Input %s...' % self.name)
 
@@ -267,15 +267,15 @@ class Input(IOSimple):
 
 
 class Output(IOSimple):
-	def __init__(self, iorep, name, label='', index=None):
-		super(Output, self).__init__(iorep, name, label, index)
+	def __init__(self, iorep, name, group='', index=None):
+		super(Output, self).__init__(iorep, name, group, index)
 		self._input=False
 		self.logger.debug('Creating Output %s...' % self.name)
 
 
 class BinaryInput(IOSimple):
-	def __init__(self, iorep, name, contentType, label='', index=None):
-		super(BinaryInput, self).__init__(iorep, name, label, index)
+	def __init__(self, iorep, name, contentType, group='', index=None):
+		super(BinaryInput, self).__init__(iorep, name, group, index)
 		self._contentType=contentType
 		self._input=True
 		self._irqMode=IOIrqMode.Ignore
@@ -346,20 +346,20 @@ class IORepository(object):
 		except:
 			self.logger.error("Unable to register IO %s" % io.name)
 
-	def createInput(self, name, label='', index=None):
+	def createInput(self, name, group='', index=None):
 		if index==None:
 			index=len(self._inputs)
-		return self.addIO(Input(self, name, label, index))
+		return self.addIO(Input(self, name, group, index))
 
-	def createBinaryInput(self, name, contentType, label='', index=None):
+	def createBinaryInput(self, name, contentType, group='', index=None):
 		if index==None:
 			index=len(self._inputs)
-		return self.addIO(BinaryInput(self, name, contentType, label, index))
+		return self.addIO(BinaryInput(self, name, contentType, group, index))
 
-	def createOutput(self, name, label='', index=None):
+	def createOutput(self, name, group='', index=None):
 		if index==None:
 			index=len(self._outputs)
-		return self.addIO(Output(self, name, label, index))
+		return self.addIO(Output(self, name, group, index))
 
 	def ioexists(self, name):
 		with self._lock:
@@ -383,18 +383,20 @@ class IORepository(object):
 			except:
 				self.logger.warning('unable to retrieve input %s' % name)
 
-	def inputs(self):
+	def inputs(self, group=None):
 		ios=[]
 		with self._lock:
 			for io in self._inputs.values():
-				ios.append(io)
+				if not group or io.group==group:
+					ios.append(io)
 		return ios
 
-	def outputs(self):
+	def outputs(self, group=None):
 		ios=[]
 		with self._lock:
 			for io in self._outputs.values():
-				ios.append(io)
+				if not group or io.group==group:
+					ios.append(io)
 		return ios
 
 	def ios(self, name=None):
@@ -1005,27 +1007,27 @@ class IOManager(DeviceThread):
 	def onUpdateOutput(self, io):
 		return True
 
-	def createInput(self, name, label='', index=None):
-		io=self.iorep.createInput(name, label, index)
+	def createInput(self, name, group='', index=None):
+		io=self.iorep.createInput(name, group, index)
 		return io
 
-	def createBinaryInput(self, name, contentType, label='', index=None):
-		io=self.iorep.createBinaryInput(name, contentType, label, index)
+	def createBinaryInput(self, name, contentType, group='', index=None):
+		io=self.iorep.createBinaryInput(name, contentType, group, index)
 		return io
 
-	def createJpegInput(self, name, label='', index=None):
-		io=self.iorep.createBinaryInput(name, 'image/jpeg', label, index)
+	def createJpegInput(self, name, group='', index=None):
+		io=self.iorep.createBinaryInput(name, 'image/jpeg', group, index)
 		return io
 
-	def createOutput(self, name, label='', index=None):
-		io=self.iorep.createOutput(name, label, index)
+	def createOutput(self, name, group='', index=None):
+		io=self.iorep.createOutput(name, group, index)
 		return io
 
-	def inputs(self):
-		return self.iorep.inputs()
+	def inputs(self, group=None):
+		return self.iorep.inputs(group)
 	
-	def outputs(self):
-		return self.iorep.outputs()
+	def outputs(self, group=None):
+		return self.iorep.outputs(group)
 
 	def io(self, name):
 		return self.iorep.io(name)

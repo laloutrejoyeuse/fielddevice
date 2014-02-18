@@ -115,7 +115,12 @@ class Oscillator(VIO):
 class Chenillard(VIO):
 	def __init__(self, size, delay=1):
 		super(Chenillard, self).__init__()
-		self._size=size
+		if isinstance(size, (list, tuple)):
+			self._items=size
+			self._size=len(size)
+		else:
+			self._items=None
+			self._size=size
 		self._delay=delay
 		self._loop=0
 		self._value=-1
@@ -134,6 +139,18 @@ class Chenillard(VIO):
 			if self.isActive():
 				values[self._value]=1
 			return values
+
+	def items(self):
+		return self._items
+
+	def itemActive(self):
+		try:
+			with self._lock:
+				self._manager()
+				if self.isActive() and self._items:
+					return self._items[self._value]
+		except:
+			pass
 
 	def __repr__(self):
 		return str(self.channels())

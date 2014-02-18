@@ -6,7 +6,12 @@ import time
 
 from pifacedigitalio import PiFaceDigital
 from homematic import CCU
-from vio import VDout, Impulse, Oscillator, RisingEdgeDetector
+from vio import *
+
+
+# clean : io labels --> useless
+# todo : io labels-->group (i.e. "lights")
+# todo: get ios by names (i.e. inputs('lights'))
 
 class MyIOManager(IOManager):
 	def onInit(self):
@@ -15,12 +20,14 @@ class MyIOManager(IOManager):
 		self.intrusion=self.createOutput('i2')
 		self.day=self.createOutput('i3')
 
-		self.lightFHE=self.createInput('o0')
-		self.lightFHE_DCH=self.createInput('o1')
-		self.lightDCH=self.createInput('o2')
-		self.lightKITCHEN=self.createInput('o3')
-		self.lightENTRANCE=self.createInput('o4')
-		self.lightCONFERENCE=self.createInput('o5')
+		self.lightFHE=self.createInput('o0', 'light')
+		self.lightFHE_DCH=self.createInput('o1', 'light')
+		self.lightDCH=self.createInput('o2', 'light')
+		self.lightKITCHEN=self.createInput('o3', 'light')
+		self.lightENTRANCE=self.createInput('o4', 'light-reserve')
+		self.lightCONFERENCE=self.createInput('o5', 'light-reserve')
+		self.chenillard=Chenillard(self.inputs('light'), 1)
+		self.chenillard.start(10)
 
 		self.irSALEVE=self.createInput('ir0')
 		self.timerSALEVE=Impulse(120)
@@ -40,21 +47,27 @@ class MyIOManager(IOManager):
 		self.job(self.ccuThread)
 
 	def onRun(self):
-		#state=bool(int(time.time()) % 5)
-		if self.intrusion.value:
-			self.lightFHE.value=1
-			self.lightFHE_DCH.value=1
-			self.lightDCH.value=1
-			self.lightKITCHEN.value=1
-			self.lightENTRANCE.value=1
-			self.lightCONFERENCE.value=1
+		if self.chenillard.isActive():
+			for item in self.chenillard.items():
+				if item==self.chenillard.itemActive():
+					item.value=1
+				else:
+					item.value=0
 		else:
-			self.lightFHE.value=self.timerSALEVE.value or self.timerROUTE.value
-			self.lightFHE_DCH.value=self.timerSALEVE.value or self.timerVOIRONS.value
-			self.lightDCH.value=self.timerSALEVE.value or self.timerVOIRONS.value
-			self.lightKITCHEN.value=self.timerVOIRONS.value or self.timerJURA.value
-			self.lightENTRANCE.value=self.timerVOIRONS.value or self.timerJURA.value or self.timerROUTE.value
-			self.lightCONFERENCE.value=self.timerSALEVE.value or self.timerROUTE.value
+			if self.intrusion.value:
+				self.lightFHE.value=1
+				self.lightFHE_DCH.value=1
+				self.lightDCH.value=1
+				self.lightKITCHEN.value=1
+				self.lightENTRANCE.value=1
+				self.lightCONFERENCE.value=1
+			else:
+				self.lightFHE.value=self.timerSALEVE.value or self.timerROUTE.value
+				self.lightFHE_DCH.value=self.timerSALEVE.value or self.timerVOIRONS.value
+				self.lightDCH.value=self.timerSALEVE.value or self.timerVOIRONS.value
+				self.lightKITCHEN.value=self.timerVOIRONS.value or self.timerJURA.value
+				self.lightENTRANCE.value=self.timerVOIRONS.value or self.timerJURA.value or self.timerROUTE.value
+				self.lightCONFERENCE.value=self.timerSALEVE.value or self.timerROUTE.value
 
 		self.ccuError=self.timerCCUError.value
 
@@ -96,6 +109,10 @@ class MyIOManager(IOManager):
 						elif notification.isSource('JEQ0701577:1'): 	# parking voirons
 							self.timerVOIRONS.pulse()
 							self.timerSALEVE.pulse()
+						elif notification.isSource('KEQ0194126:1'): 	# parking jura
+							self.timerJURA.pulse()
+							self.timerROUTE.pulse()
+							self.timerVOIRONS.pulse()
 					elif notification.key=='error' or notification.key=='sticky_unreach':
 						if notification.value:
 							ccu.logger.error(notification)
